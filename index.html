@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Digital Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            sendPasswordResetEmail,
+            signOut,
+            GoogleAuthProvider,
+            signInWithPopup
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { 
+            getFirestore,
+            doc,
+            getDoc,
+            setDoc
+        } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyD6VHnL90Cq4BnWbuylnsYtvveWsXiFD48",
+          authDomain: "my-digital-hub-30516.firebaseapp.com",
+          projectId: "my-digital-hub-30516",
+          storageBucket: "my-digital-hub-30516.firebasestorage.app",
+          messagingSenderId: "903862343737",
+          appId: "1:903862343737:web:0ac0f9a87aa407e2cf55e8",
+          measurementId: "G-X5BFXPYRKD"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.firebaseServices = {
+            auth, db, onAuthStateChanged, createUserWithEmailAndPassword,
+            signInWithEmailAndPassword, signOut, doc, getDoc, setDoc,
+            GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail
+        };
+    </script>
+
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-font-smoothing: antialiased; 
+            -moz-osx-font-smoothing: grayscale;
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6, #60a5fa);
+        }
+        .dark body {
+             background: linear-gradient(135deg, #0f172a, #1e293b, #334155);
+        }
+        .modal, .toast { transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease, opacity 0.3s ease; }
+        .toast { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .credential-field { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.5rem; }
+        .copy-btn { display: none; }
+        .unlocked .copy-btn { display: inline-flex; }
+        .hidden-view { display: none !important; }
+        .pin-input {
+            width: 3rem; height: 3.5rem; text-align: center; font-size: 1.5rem;
+            border-radius: 0.5rem; border: 2px solid;
+            background-color: transparent;
+        }
+    </style>
+</head>
+<body class="text-slate-800 dark:text-slate-200 flex items-center justify-center min-h-screen p-4 transition-colors">
+
+    <!-- Loading Spinner -->
+    <div id="loading-view" class="flex flex-col items-center justify-center gap-4">
+        <svg class="animate-spin h-10 w-10 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p class="text-white/80">Initializing...</p>
+    </div>
+
+    <!-- Authentication View -->
+    <div id="auth-view" class="w-full max-w-sm mx-auto hidden-view">
+         <div class="bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/20">
+            <h2 class="text-3xl font-bold text-center text-white mb-2">Digital Hub</h2>
+            <p class="text-center text-white/70 mb-8" id="auth-mode-text">Sign in to continue</p>
+            <form id="auth-form" class="space-y-4">
+                <input type="email" id="auth-email" class="w-full bg-white/10 border-white/20 text-white placeholder-white/50 rounded-md p-3 text-lg focus:ring-2 focus:ring-sky-400 outline-none" placeholder="Email" required>
+                <input type="password" id="auth-password" class="w-full bg-white/10 border-white/20 text-white placeholder-white/50 rounded-md p-3 text-lg focus:ring-2 focus:ring-sky-400 outline-none" placeholder="Password" required>
+                <div class="flex justify-end">
+                    <button type="button" id="forgot-password-btn" class="text-sm text-sky-300 hover:text-sky-200">Forgot Password?</button>
+                </div>
+                <p id="auth-error" class="text-red-400 text-sm text-center h-4"></p>
+                <button type="submit" id="auth-submit-btn" class="w-full px-6 py-3 mt-4 rounded-md text-white bg-sky-500 hover:bg-sky-600 transition-colors shadow-lg text-lg font-semibold">Sign In</button>
+            </form>
+            <div class="relative my-6"><div class="absolute inset-0 flex items-center"><div class="w-full border-t border-white/20"></div></div><div class="relative flex justify-center text-sm"><span class="bg-gray-800/50 px-2 text-white/70 backdrop-blur-sm">Or continue with</span></div></div>
+            <div><button id="google-signin-btn" class="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-md bg-white/90 text-slate-700 hover:bg-white transition-colors shadow-md font-medium"><svg class="w-5 h-5" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path><path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path><path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path><path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C43.021,36.213,44,34.059,44,31C44,27.202,44,23.219,44,20C44,22.659,43.862,21.35,43.611,20.083z"></path></svg><span>Sign in with Google</span></button></div>
+            <p class="text-center mt-6 text-sm text-white/70"><span id="auth-toggle-text">Don't have an account? </span><button id="auth-toggle-btn" class="font-semibold text-sky-300 hover:text-sky-200">Sign Up</button></p>
+         </div>
+    </div>
+
+    <!-- Main Application View -->
+    <main id="app-view" class="bg-white/10 backdrop-blur-xl w-full max-w-md mx-auto rounded-2xl shadow-2xl p-8 text-center border border-white/20 hidden-view">
+        <button id="logout-btn" class="absolute top-4 right-4 text-white/50 hover:text-white transition-colors" title="Logout"><i data-lucide="log-out" class="w-6 h-6"></i></button>
+        <div class="relative w-28 h-28 mx-auto"><img id="profile-img" src="https://placehold.co/112x112/E2E8F0/4A5568?text=You" alt="Profile Picture" class="w-28 h-28 rounded-full mx-auto shadow-lg object-cover border-4 border-white/20"><button id="edit-btn" class="absolute -bottom-2 -right-2 bg-sky-500 hover:bg-sky-600 text-white p-2.5 rounded-full shadow-md transition-transform transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-400 dark:focus:ring-offset-gray-800"><i data-lucide="pencil" class="w-5 h-5"></i></button></div>
+        <h1 id="profile-name" class="text-3xl font-bold text-white mt-6">Your Name</h1>
+        <p id="profile-bio" class="text-white/70 mt-2">Your bio or tagline goes here.</p>
+        <div id="social-links-container" class="flex justify-center items-center gap-4 mt-8 flex-wrap"></div>
+        <div id="vault-section" class="mt-8 pt-6 border-t border-white/20"><h2 class="text-xl font-bold text-white">Secure Vault</h2><div id="vault-content" class="text-left mt-4 p-4 bg-black/20 rounded-lg"></div><button id="unlock-vault-btn" class="mt-4 w-full flex items-center justify-center gap-2 px-6 py-2 rounded-md text-white bg-sky-500 hover:bg-sky-600 transition-colors shadow-md"><i data-lucide="lock" class="w-5 h-5"></i><span>Unlock Vault</span></button></div>
+    </main>
+
+    <!-- Modals -->
+    <div id="edit-modal" class="modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 invisible opacity-0"></div>
+    <div id="pin-modal" class="modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 invisible opacity-0"></div>
+    <div id="forgot-password-modal" class="modal fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 invisible opacity-0"></div>
+    <div id="toast-notification" class="toast fixed bottom-5 right-5 bg-green-600 text-white px-6 py-3 rounded-lg shadow-xl opacity-0 translate-y-10 flex items-center gap-3 z-50"></div>
+
+    <script type="module">
+        const { 
+            auth, db, onAuthStateChanged, createUserWithEmailAndPassword,
+            signInWithEmailAndPassword, signOut, doc, getDoc, setDoc,
+            GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail
+        } = window.firebaseServices;
+
+        const SOCIAL_PLATFORMS = {
+            facebook: { name: 'Facebook', icon: 'facebook', color: 'hover:text-blue-500', placeholder: 'https://facebook.com/...', loginUrl: 'https://www.facebook.com/login' },
+            linkedin: { name: 'LinkedIn', icon: 'linkedin', color: 'hover:text-blue-400', placeholder: 'https://linkedin.com/in/...', loginUrl: 'https://www.linkedin.com/login' },
+            github: { name: 'GitHub', icon: 'github', color: 'hover:text-gray-300', placeholder: 'https://github.com/...', loginUrl: 'https://github.com/login' },
+            twitter: { name: 'X / Twitter', icon: 'twitter', color: 'hover:text-sky-400', placeholder: 'https://twitter.com/...', loginUrl: 'https://twitter.com/login' },
+            instagram: { name: 'Instagram', icon: 'instagram', color: 'hover:text-pink-400', placeholder: 'https://instagram.com/...', loginUrl: 'https://www.instagram.com/accounts/login/' },
+            website: { name: 'Personal Website', icon: 'globe', color: 'hover:text-green-400', placeholder: 'https://your-site.com' },
+            email: { name: 'Email', icon: 'mail', color: 'hover:text-red-400', placeholder: 'mailto:you@example.com' },
+        };
+        const DEFAULT_PROFILE = {
+            name: 'Your Name', bio: 'Your bio or tagline goes here.', imgUrl: 'https://placehold.co/112x112/E2E8F0/4A5568?text=You',
+            links: [],
+            secureData: null,
+            pinHash: null,
+        };
+
+        const getEl = (id) => document.getElementById(id);
+        const loadingView = getEl('loading-view'), authView = getEl('auth-view'), appView = getEl('app-view'), authForm = getEl('auth-form'),
+            authEmail = getEl('auth-email'), authPassword = getEl('auth-password'), authError = getEl('auth-error'), authToggleBtn = getEl('auth-toggle-btn'),
+            authSubmitBtn = getEl('auth-submit-btn'), authModeText = getEl('auth-mode-text'), authToggleText = getEl('auth-toggle-text'), logoutBtn = getEl('logout-btn'),
+            profileImg = getEl('profile-img'), profileName = getEl('profile-name'), profileBio = getEl('profile-bio'), socialLinksContainer = getEl('social-links-container'),
+            vaultSection = getEl('vault-section'), vaultContent = getEl('vault-content'), unlockVaultBtn = getEl('unlock-vault-btn'), googleSignInBtn = getEl('google-signin-btn'),
+            forgotPasswordBtn = getEl('forgot-password-btn');
+
+        let userProfile = {}, currentUser = null, sessionPIN = null, pinPromiseResolver = null, isSignUpMode = false;
+        
+        const showModal = (modalEl) => { modalEl.classList.remove('invisible', 'opacity-0'); modalEl.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0'); };
+        const hideModal = (modalEl) => { modalEl.classList.add('opacity-0'); modalEl.querySelector('.modal-content').classList.add('scale-95', 'opacity-0'); setTimeout(() => modalEl.classList.add('invisible'), 300); };
+        const showToast = (message, isError=false) => { const toast = getEl('toast-notification'); toast.innerHTML = `<i data-lucide="${isError ? 'alert-circle' : 'check-circle'}" class="w-6 h-6"></i><span>${message}</span>`; toast.className = `toast fixed bottom-5 right-5 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-3 z-50 ${isError ? 'bg-red-500' : 'bg-green-600'}`; lucide.createIcons(); toast.classList.remove('opacity-0', 'translate-y-10'); setTimeout(() => toast.classList.add('opacity-0', 'translate-y-10'), 3000); };
+
+        const loadProfile = async () => {
+            if (!currentUser) return;
+            const docRef = doc(db, "users", currentUser.uid);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                userProfile = docSnap.data();
+                if (userProfile.links && !Array.isArray(userProfile.links)) {
+                    userProfile.links = [];
+                }
+            } else {
+                userProfile = {
+                    ...DEFAULT_PROFILE,
+                    name: currentUser.displayName || 'New User',
+                    imgUrl: currentUser.photoURL || DEFAULT_PROFILE.imgUrl,
+                    links: currentUser.email ? [{ platform: 'email', url: `mailto:${currentUser.email}`, id: crypto.randomUUID() }] : []
+                };
+                await saveProfile();
+            }
+        };
+
+        const saveProfile = async () => { if (currentUser) { await setDoc(doc(db, "users", currentUser.uid), userProfile); }};
+        const encrypt = (text, pin) => CryptoJS.AES.encrypt(text, pin).toString();
+        const decrypt = (cipherText, pin) => { try { const bytes = CryptoJS.AES.decrypt(cipherText, pin); return bytes.toString(CryptoJS.enc.Utf8) || null; } catch (e) { return null; }};
+        const hashPIN = (pin) => CryptoJS.SHA256(pin).toString();
+
+        function renderProfile() {
+            profileName.textContent = userProfile.name;
+            profileBio.textContent = userProfile.bio;
+            profileImg.src = userProfile.imgUrl || DEFAULT_PROFILE.imgUrl;
+            profileImg.onerror = () => { profileImg.src = DEFAULT_PROFILE.imgUrl; };
+            socialLinksContainer.innerHTML = '';
+            (userProfile.links || []).forEach(link => {
+                const platform = SOCIAL_PLATFORMS[link.platform];
+                if (platform) {
+                    const linkEl = document.createElement('a');
+                    linkEl.href = link.url; linkEl.target = '_blank'; linkEl.rel = 'noopener noreferrer';
+                    linkEl.className = `text-white/50 ${platform.color} transition-colors transform hover:scale-110`;
+                    linkEl.innerHTML = `<i data-lucide="${platform.icon}" class="w-8 h-8"></i>`;
+                    socialLinksContainer.appendChild(linkEl);
+                }
+            });
+            renderVault();
+            lucide.createIcons();
+        }
+
+        function renderVault(decryptedData = null) {
+            const hasSecureData = userProfile.secureData && decrypt(userProfile.secureData, "test") !== "[]";
+            vaultSection.style.display = hasSecureData ? 'block' : 'none';
+            if (!hasSecureData) return;
+
+            if (decryptedData) {
+                vaultContent.innerHTML = '';
+                const groupedCreds = decryptedData.reduce((acc, cred) => {
+                    if (!acc[cred.platform]) acc[cred.platform] = [];
+                    acc[cred.platform].push(cred);
+                    return acc;
+                }, {});
+
+                Object.keys(groupedCreds).forEach(platformKey => {
+                    const platform = SOCIAL_PLATFORMS[platformKey];
+                    const loginLink = platform.loginUrl ? `<a href="${platform.loginUrl}" target="_blank" class="login-link-btn copy-btn p-1.5 rounded-md text-white/70 hover:bg-white/20" title="Go to Login Page"><i data-lucide="arrow-up-right-square" class="w-4 h-4"></i></a>` : '';
+                    const groupContainer = document.createElement('div');
+                    groupContainer.className = 'mb-4 unlocked';
+                    
+                    let groupHTML = `<div class="flex items-center justify-between font-semibold text-white/90"><div class="flex items-center gap-2"><i data-lucide="${platform.icon}" class="w-4 h-4"></i> ${platform.name}</div>${loginLink}</div>`;
+
+                    groupedCreds[platformKey].forEach(creds => {
+                        groupHTML += `
+                            <div class="pl-6 border-l border-white/10 ml-2 mt-2">
+                            ${creds.username ? `<div class="credential-field mt-1"><input type="text" value="${creds.username}" class="w-full bg-transparent text-sm p-1 rounded text-white/70" readonly><button class="copy-btn p-1.5 rounded-md text-white/70 hover:bg-white/20" data-copy="${creds.username}"><i data-lucide="copy" class="w-4 h-4"></i></button></div>` : ''}
+                            ${creds.password ? `<div class="credential-field mt-1"><input type="password" value="${creds.password}" class="w-full bg-transparent text-sm p-1 rounded text-white/70" readonly><div class="flex items-center"><button class="toggle-vis-btn copy-btn p-1.5 rounded-md text-white/70 hover:bg-white/20"><i data-lucide="eye" class="w-4 h-4"></i></button><button class="copy-btn p-1.5 rounded-md text-white/70 hover:bg-white/20" data-copy="${creds.password}"><i data-lucide="copy" class="w-4 h-4"></i></button></div></div>` : ''}
+                            </div>
+                        `;
+                    });
+                    groupContainer.innerHTML = groupHTML;
+                    vaultContent.appendChild(groupContainer);
+                });
+
+                lucide.createIcons();
+                unlockVaultBtn.innerHTML = `<i data-lucide="unlock" class="w-5 h-5"></i><span>Vault Unlocked</span>`;
+            } else {
+                vaultContent.innerHTML = '<p class="text-white/60 text-center">Your credentials are encrypted. Unlock to view.</p>';
+                unlockVaultBtn.innerHTML = `<i data-lucide="lock" class="w-5 h-5"></i><span>Unlock Vault</span>`;
+            }
+        }
+        
+        function getPIN(isCreating) {
+            const pinModal = getEl('pin-modal'), pinModalTitle = pinModal.querySelector('#pin-modal-title'), pinModalText = pinModal.querySelector('#pin-modal-text'), pinInputs = pinModal.querySelectorAll('.pin-input'), pinError = pinModal.querySelector('#pin-error');
+            pinModalTitle.textContent = isCreating ? 'Create Vault PIN' : 'Unlock Vault';
+            pinModalText.textContent = isCreating ? 'Set a 4-digit PIN to encrypt your data. This cannot be recovered!' : 'Enter your 4-digit PIN.';
+            pinInputs.forEach(input => input.value = ''); pinError.textContent = '';
+            showModal(pinModal); 
+            setTimeout(() => pinInputs[0].focus(), 50);
+            return new Promise(resolve => { pinPromiseResolver = resolve; });
+        }
+        
+        async function handleEditClick() {
+            let decryptedCredentials = [];
+            if (userProfile.secureData) {
+                if (!userProfile.pinHash) {
+                    showToast("Create a PIN before saving credentials.", true);
+                } else {
+                    const pin = sessionPIN || await getPIN(false);
+                    if (!pin) return;
+                    if (hashPIN(pin) !== userProfile.pinHash) { getEl('pin-modal').querySelector('#pin-error').textContent = "Wrong PIN."; return; }
+                    
+                    const decryptedJSON = decrypt(userProfile.secureData, pin);
+                    let creds = JSON.parse(decryptedJSON);
+
+                    if (creds && !Array.isArray(creds)) {
+                        creds = Object.entries(creds).map(([platform, data]) => ({...data, platform, id: crypto.randomUUID()}));
+                    }
+                    decryptedCredentials = creds || [];
+                    sessionPIN = pin;
+                }
+            }
+            populateForm(decryptedCredentials);
+            showModal(getEl('edit-modal'));
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            userProfile.name = formData.get('name-input'); userProfile.bio = formData.get('bio-input'); userProfile.imgUrl = formData.get('img-input');
+            
+            const newLinks = [];
+            document.querySelectorAll('.link-editor-row').forEach(row => {
+                const platform = row.querySelector('.platform-select').value;
+                const url = row.querySelector('.url-input').value;
+                if (platform && url) {
+                    newLinks.push({ platform, url, id: row.dataset.id });
+                }
+            });
+            userProfile.links = newLinks;
+
+            const newSecureData = [];
+            document.querySelectorAll('.credential-editor-row').forEach(row => {
+                const platform = row.querySelector('.platform-select').value;
+                const username = row.querySelector('.username-input').value;
+                const password = row.querySelector('.password-input').value;
+                if (platform && (username || password)) {
+                    newSecureData.push({ platform, username, password, id: row.dataset.id });
+                }
+            });
+
+            if (newSecureData.length > 0) {
+                if (!sessionPIN) {
+                    const isCreating = !userProfile.pinHash;
+                    const pin = await getPIN(isCreating);
+                    if (!pin || pin.length < 4) { showToast("PIN must be 4 digits. Save cancelled.", true); return; }
+                    if (isCreating) { userProfile.pinHash = hashPIN(pin); } 
+                    else if (hashPIN(pin) !== userProfile.pinHash) { showToast("Wrong PIN. Save cancelled.", true); return; }
+                    sessionPIN = pin;
+                }
+                userProfile.secureData = encrypt(JSON.stringify(newSecureData), sessionPIN);
+            } else {
+                userProfile.secureData = null;
+            }
+            await saveProfile(); renderProfile(); hideModal(getEl('edit-modal')); showToast("Details saved successfully!");
+        }
+
+        async function handleUnlockVault() {
+            if (!userProfile.secureData || !userProfile.pinHash) return;
+            const pin = await getPIN(false);
+            if (!pin) return;
+            if (hashPIN(pin) === userProfile.pinHash) {
+                sessionPIN = pin;
+                const decryptedJSON = decrypt(userProfile.secureData, pin);
+                let creds = JSON.parse(decryptedJSON);
+                if (creds && !Array.isArray(creds)) {
+                     creds = Object.entries(creds).map(([platform, data]) => ({...data, platform, id: crypto.randomUUID()}));
+                }
+                renderVault(creds || []);
+                hideModal(getEl('pin-modal'));
+            } else {
+                getEl('pin-modal').querySelector('#pin-error').textContent = "Wrong PIN.";
+            }
+        }
+        
+        function handleCopy(e) {
+            const copyBtn = e.target.closest('.copy-btn');
+            if (!copyBtn) return;
+
+            const textToCopy = copyBtn.dataset.copy;
+            const textArea = document.createElement("textarea");
+            textArea.style.position = 'fixed';
+            textArea.style.top = '-9999px';
+            textArea.style.left = '-9999px';
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast("Copied to clipboard!");
+            } catch (err) {
+                showToast("Failed to copy.", true);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function handleTogglePasswordVisibility(e) {
+            const toggleBtn = e.target.closest('.toggle-vis-btn');
+            if (!toggleBtn) return;
+            const field = toggleBtn.closest('.credential-field');
+            const input = field.querySelector('input');
+            const icon = toggleBtn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.setAttribute('data-lucide', 'eye-off');
+            } else {
+                input.type = 'password';
+                icon.setAttribute('data-lucide', 'eye');
+            }
+            lucide.createIcons();
+        }
+        function toggleAuthMode() {
+            isSignUpMode = !isSignUpMode; authError.textContent = ''; authForm.reset();
+            forgotPasswordBtn.style.display = isSignUpMode ? 'none' : 'block';
+            if (isSignUpMode) { authModeText.textContent = 'Create a new account'; authSubmitBtn.textContent = 'Sign Up'; authToggleText.textContent = 'Already have an account? '; authToggleBtn.textContent = 'Sign In'; } 
+            else { authModeText.textContent = 'Sign in to continue'; authSubmitBtn.textContent = 'Sign In'; authToggleText.textContent = 'Don\'t have an account? '; authToggleBtn.textContent = 'Sign Up'; }
+        }
+        async function handleAuthFormSubmit(e) {
+            e.preventDefault();
+            authSubmitBtn.disabled = true;
+            authError.textContent = '';
+            try { if (isSignUpMode) { await createUserWithEmailAndPassword(auth, authEmail.value, authPassword.value); } else { await signInWithEmailAndPassword(auth, authEmail.value, authPassword.value); } }
+            catch (error) { authError.textContent = error.message.replace('Firebase: ', ''); }
+            finally { authSubmitBtn.disabled = false; }
+        }
+        async function handleGoogleSignIn() {
+            const provider = new GoogleAuthProvider();
+            try { await signInWithPopup(auth, provider); }
+            catch (error) { authError.textContent = error.message.replace('Firebase: ', ''); }
+        }
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const email = getEl('reset-email-input').value;
+            if (!email) return;
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showToast("Password reset email sent!");
+                hideModal(getEl('forgot-password-modal'));
+            } catch (error) {
+                showToast(error.message.replace('Firebase: ',''), true);
+            }
+        }
+        function handleLogout() { signOut(auth); sessionPIN = null; }
+
+        onAuthStateChanged(auth, async (user) => {
+            if (user) { currentUser = user; await loadProfile(); renderProfile(); authView.classList.add('hidden-view'); appView.classList.remove('hidden-view'); } 
+            else { currentUser = null; appView.classList.add('hidden-view'); authView.classList.remove('hidden-view'); }
+            loadingView.classList.add('hidden-view');
+            lucide.createIcons();
+        });
+
+        // Dynamic Form Logic
+        function createPlatformOptions() {
+            return Object.entries(SOCIAL_PLATFORMS).map(([key, {name}]) => `<option value="${key}">${name}</option>`).join('');
+        }
+
+        function createLinkEditorRow(link = {}) {
+            const id = link.id || crypto.randomUUID();
+            const row = document.createElement('div');
+            row.className = 'link-editor-row grid grid-cols-[1fr,2fr,auto] gap-2 items-center';
+            row.dataset.id = id;
+            row.innerHTML = `
+                <select class="platform-select w-full bg-white/10 text-white border-white/20 rounded-md p-2 focus:ring-2 focus:ring-sky-400 outline-none">${createPlatformOptions()}</select>
+                <input type="url" class="url-input w-full bg-white/10 text-white border-white/20 rounded-md p-2 focus:ring-2 focus:ring-sky-400 outline-none" placeholder="https://..." value="${link.url || ''}">
+                <button type="button" class="remove-row-btn p-2 text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+            `;
+            row.querySelector('.platform-select').value = link.platform || 'website';
+            return row;
+        }
+
+        function createCredentialEditorRow(cred = {}) {
+            const id = cred.id || crypto.randomUUID();
+            const row = document.createElement('div');
+            row.className = 'credential-editor-row p-3 border border-white/10 rounded-lg space-y-2';
+            row.dataset.id = id;
+            row.innerHTML = `
+                <div class="grid grid-cols-[1fr,auto] gap-2 items-center">
+                    <select class="platform-select w-full bg-white/20 text-white border-white/20 rounded-md p-2 focus:ring-2 focus:ring-sky-400 outline-none">${createPlatformOptions()}</select>
+                    <button type="button" class="remove-row-btn p-2 text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-5 h-5"></i></button>
+                </div>
+                <input type="text" class="username-input w-full bg-white/10 text-white border-white/20 rounded-md p-2 focus:ring-2 focus:ring-sky-400 outline-none" placeholder="Username or Email" value="${cred.username || ''}">
+                <input type="password" class="password-input w-full bg-white/10 text-white border-white/20 rounded-md p-2 focus:ring-2 focus:ring-sky-400 outline-none" placeholder="Password" value="${cred.password || ''}">
+            `;
+            row.querySelector('.platform-select').value = cred.platform || 'website';
+            return row;
+        }
+
+        function populateForm(decryptedCredentials = []) {
+            const profileForm = getEl('profile-form');
+            profileForm.elements['name-input'].value = userProfile.name;
+            profileForm.elements['bio-input'].value = userProfile.bio;
+            profileForm.elements['img-input'].value = userProfile.imgUrl;
+
+            const linksEditor = getEl('social-links-editor');
+            linksEditor.innerHTML = '';
+            (userProfile.links || []).forEach(link => linksEditor.appendChild(createLinkEditorRow(link)));
+
+            const credentialsEditor = getEl('secure-credentials-editor');
+            credentialsEditor.innerHTML = '';
+            decryptedCredentials.forEach(cred => credentialsEditor.appendChild(createCredentialEditorRow(cred)));
+            
+            lucide.createIcons();
+        }
+
+        // Initialize Modals and Event Listeners
+        getEl('edit-modal').innerHTML = `<div class="modal-content bg-gray-800/80 backdrop-blur-xl text-white w-full max-w-2xl mx-auto rounded-2xl shadow-2xl p-8 relative transform scale-95 opacity-0 max-h-[90vh] overflow-y-auto border border-white/20"><h2 class="text-2xl font-bold mb-6 text-center">Edit Your Details</h2><button class="close-modal-btn absolute top-4 right-4 text-white/50 hover:text-white transition-colors"><i data-lucide="x" class="w-6 h-6"></i></button><form id="profile-form" class="space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-6"><div><label for="name-input" class="block text-sm font-medium">Name</label><input type="text" id="name-input" name="name-input" class="w-full bg-white/10 border-white/20 rounded-md p-2 mt-1"></div><div><label for="img-input" class="block text-sm font-medium">Profile Picture URL</label><input type="url" id="img-input" name="img-input" class="w-full bg-white/10 border-white/20 rounded-md p-2 mt-1"></div></div><div><label for="bio-input" class="block text-sm font-medium">Bio</label><input type="text" id="bio-input" name="bio-input" class="w-full bg-white/10 border-white/20 rounded-md p-2 mt-1"></div><hr class="border-white/20"><div><div class="flex justify-between items-center"><h3 class="text-lg font-semibold">Social & Personal Links</h3><button type="button" id="add-link-btn" class="flex items-center gap-1 text-sm text-sky-300 hover:text-sky-200"><i data-lucide="plus-circle" class="w-4 h-4"></i> Add Link</button></div><div id="social-links-editor" class="space-y-2 mt-2"></div></div><hr class="border-white/20"><div><div class="flex justify-between items-center"><h3 class="text-lg font-semibold">Secure Credentials</h3><button type="button" id="add-credential-btn" class="flex items-center gap-1 text-sm text-sky-300 hover:text-sky-200"><i data-lucide="plus-circle" class="w-4 h-4"></i> Add Credential</button></div><div id="secure-credentials-editor" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2"></div></div><hr class="border-white/20"><div class="flex items-center justify-between p-4 bg-black/20 rounded-lg"><p>Enable Two-Factor Authentication</p><button type="button" class="px-4 py-2 text-sm rounded-md bg-white/20 cursor-not-allowed" title="Coming soon!" disabled>Enable</button></div><div class="flex justify-end gap-4 pt-4"><button type="button" class="cancel-btn px-6 py-2 rounded-md bg-white/10 hover:bg-white/20">Cancel</button><button type="submit" class="px-6 py-2 rounded-md text-white bg-sky-500 hover:bg-sky-600">Save Changes</button></div></form></div>`;
+        getEl('pin-modal').innerHTML = `<div class="modal-content bg-gray-800/80 backdrop-blur-xl text-white w-full max-w-sm mx-auto rounded-2xl shadow-2xl p-8 relative transform scale-95 opacity-0 border border-white/20"><h2 id="pin-modal-title" class="text-2xl font-bold mb-4 text-center">Unlock Vault</h2><p id="pin-modal-text" class="text-center text-white/70 mb-6">Enter your 4-digit PIN.</p><form id="pin-form"><div class="flex justify-center gap-3" dir="ltr">${Array(4).fill(0).map((_,i) => `<input type="password" inputmode="numeric" maxlength="1" class="pin-input border-white/30 focus:border-sky-400 focus:ring-sky-400 focus:ring-2 outline-none">`).join('')}</div><p id="pin-error" class="text-red-400 text-sm mt-4 text-center h-4"></p><div class="flex justify-center gap-4 pt-4"><button type="button" class="cancel-btn px-6 py-2 rounded-md bg-white/10 hover:bg-white/20">Cancel</button><button type="submit" class="px-6 py-2 rounded-md text-white bg-sky-500 hover:bg-sky-600">Submit</button></div></form></div>`;
+        getEl('forgot-password-modal').innerHTML = `<div class="modal-content bg-gray-800/80 backdrop-blur-xl text-white w-full max-w-sm mx-auto rounded-2xl shadow-2xl p-8 relative transform scale-95 opacity-0 border border-white/20"><h2 class="text-2xl font-bold mb-4 text-center">Reset Password</h2><p class="text-center text-white/70 mb-6">Enter your email to receive a password reset link.</p><form id="reset-form"><input type="email" id="reset-email-input" class="w-full bg-white/10 border-white/20 rounded-md p-3 text-lg" required placeholder="your.email@example.com"><div class="flex justify-center gap-4 pt-6"><button type="button" class="cancel-btn px-6 py-2 rounded-md bg-white/10 hover:bg-white/20">Cancel</button><button type="submit" class="px-6 py-2 rounded-md text-white bg-sky-500 hover:bg-sky-600">Send Link</button></div></form></div>`;
+        getEl('toast-notification').innerHTML = ``;
+        
+        // Modal general event listeners
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', e => { if (e.target === modal) hideModal(modal); });
+            modal.querySelectorAll('.cancel-btn, .close-modal-btn').forEach(btn => btn.addEventListener('click', () => hideModal(modal)));
+        });
+
+        const editModal = getEl('edit-modal');
+        editModal.addEventListener('click', e => {
+            if (e.target.closest('#add-link-btn')) {
+                getEl('social-links-editor').appendChild(createLinkEditorRow());
+                lucide.createIcons();
+            } else if (e.target.closest('#add-credential-btn')) {
+                getEl('secure-credentials-editor').appendChild(createCredentialEditorRow());
+                lucide.createIcons();
+            } else if (e.target.closest('.remove-row-btn')) {
+                e.target.closest('.link-editor-row, .credential-editor-row').remove();
+            }
+        });
+        
+        editModal.querySelector('#profile-form').addEventListener('submit', handleFormSubmit);
+        getEl('edit-btn').addEventListener('click', handleEditClick);
+
+        // PIN Modal
+        const pinForm = getEl('pin-modal').querySelector('#pin-form');
+        const pinInputs = [...pinForm.querySelectorAll('.pin-input')];
+        pinForm.addEventListener('submit', e => { e.preventDefault(); if (pinPromiseResolver) { pinPromiseResolver(pinInputs.map(i=>i.value).join('')); pinPromiseResolver = null; } });
+        pinInputs.forEach((input, index) => {
+            input.addEventListener('keydown', (e) => { 
+                if (e.key === "Backspace" && !input.value && index > 0) { 
+                    pinInputs[index - 1].focus(); 
+                } else if (e.key === "Enter") {
+                    pinForm.querySelector('button[type="submit"]').click();
+                }
+            });
+            input.addEventListener('input', () => { 
+                if (input.value && /^\d$/.test(input.value) && index < pinInputs.length - 1) { 
+                    pinInputs[index + 1].focus(); 
+                }
+            });
+        });
+
+        // Other listeners
+        unlockVaultBtn.addEventListener('click', handleUnlockVault);
+        vaultContent.addEventListener('click', (e) => {
+            handleCopy(e);
+            handleTogglePasswordVisibility(e);
+        });
+        authForm.addEventListener('submit', handleAuthFormSubmit);
+        authToggleBtn.addEventListener('click', toggleAuthMode);
+        logoutBtn.addEventListener('click', handleLogout);
+        googleSignInBtn.addEventListener('click', handleGoogleSignIn);
+        forgotPasswordBtn.addEventListener('click', () => showModal(getEl('forgot-password-modal')));
+        getEl('forgot-password-modal').querySelector('#reset-form').addEventListener('submit', handleForgotPassword);
+    </script>
+</body>
+</html>
+
+
